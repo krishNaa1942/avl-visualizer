@@ -41,7 +41,16 @@ function createNode(data: number): AVLNode {
     balanceFactor: 0,
     left: null,
     right: null,
+    isNew: true,
   };
+}
+
+/** Clear isNew flag on all existing nodes (so only newly created node shows green) */
+function clearNewFlags(node: AVLNode | null): void {
+  if (!node) return;
+  node.isNew = false;
+  clearNewFlags(node.left);
+  clearNewFlags(node.right);
 }
 
 function getHeight(node: AVLNode | null): number {
@@ -115,23 +124,23 @@ function insertWithSteps(
   root: AVLNode | null,
   value: number,
   steps: InsertStep[],
-  highlightPath: number[]
+  highlightPath: number[],
+  inserted: { ok: boolean }
 ): AVLNode {
   // Base case: insert new node
   if (!root) {
-    const newNode = createNode(value);
-    newNode.isNew = true;
-    return newNode;
+    inserted.ok = true;
+    return createNode(value);  // isNew:true set in createNode
   }
 
   if (value < root.data) {
     highlightPath.push(root.id);
-    root.left = insertWithSteps(root.left, value, steps, highlightPath);
+    root.left = insertWithSteps(root.left, value, steps, highlightPath, inserted);
   } else if (value > root.data) {
     highlightPath.push(root.id);
-    root.right = insertWithSteps(root.right, value, steps, highlightPath);
+    root.right = insertWithSteps(root.right, value, steps, highlightPath, inserted);
   } else {
-    // Duplicate values: ignore
+    // Duplicate: do not insert
     return root;
   }
 
@@ -205,12 +214,16 @@ function insertWithSteps(
   return root;
 }
 
-/** Public insert API that returns steps */
+/** Public insert API — returns wasInserted:false when duplicate detected */
 export function avlInsert(
   root: AVLNode | null,
   value: number
-): { newRoot: AVLNode; steps: InsertStep[] } {
+): { newRoot: AVLNode; steps: InsertStep[]; wasInserted: boolean } {
   const steps: InsertStep[] = [];
+  const inserted = { ok: false };
+
+  // Bug fix: clear isNew on all EXISTING nodes so only the new one shows green
+  clearNewFlags(root);
 
   steps.push({
     stepIndex: 0,
@@ -222,9 +235,14 @@ export function avlInsert(
     insertedValue: value,
   });
 
-  const newRoot = insertWithSteps(root, value, steps, []);
+  const newRoot = insertWithSteps(root, value, steps, [], inserted);
 
-  // Recalculate all BFs in the final tree
+  if (!inserted.ok) {
+    // Duplicate — return unchanged tree, no steps
+    return { newRoot: newRoot as AVLNode, steps: [], wasInserted: false };
+  }
+
+  // Recalculate all heights/BFs on the final balanced tree
   recalcAll(newRoot);
 
   steps.push({
@@ -237,7 +255,7 @@ export function avlInsert(
     insertedValue: value,
   });
 
-  return { newRoot, steps };
+  return { newRoot, steps, wasInserted: true };
 }
 
 /** Rebalance a node after deletion, recording rotation steps */
@@ -397,7 +415,11 @@ export function avlDelete(
     return { newRoot: root, steps: [], found: false };
   }
 
-  if (newRoot) recalcAll(newRoot);
+  if (newRoot) {
+    recalcAll(newRoot);
+    // Bug fix: clear isNew flags — deleted node might have been green
+    clearNewFlags(newRoot);
+  }
 
   steps.push({
     stepIndex: steps.length,
@@ -429,9 +451,10 @@ export function assignPositions(
   if (!node) return;
   node.x = x;
   node.y = y;
-  const childSpread = Math.max(spread / 2, 60);
-  assignPositions(node.left, x - childSpread, y + 100, childSpread);
-  assignPositions(node.right, x + childSpread, y + 100, childSpread);
+  // Use a gentler division so deeper levels don't cramp up instantly
+  const childSpread = Math.max(spread / 1.6, 45);
+  assignPositions(node.left, x - childSpread, y + 80, childSpread);
+  assignPositions(node.right, x + childSpread, y + 80, childSpread);
 }
 
 /** Preorder traversal */

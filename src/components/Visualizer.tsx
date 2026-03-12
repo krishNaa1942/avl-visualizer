@@ -29,7 +29,6 @@ const PRESET_SEQUENCES = {
 export default function Visualizer() {
   const [root, setRoot] = useState<AVLNode | null>(null);
   const [inputValue, setInputValue] = useState("");
-  const [deleteValue, setDeleteValue] = useState("");
   const [steps, setSteps] = useState<InsertStep[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -85,7 +84,14 @@ export default function Visualizer() {
       setError("");
       setIsPlaying(false);
 
-      const { newRoot, steps: newSteps } = avlInsert(root, val);
+      const { newRoot, steps: newSteps, wasInserted } = avlInsert(root, val);
+
+      // Bug fix: handle duplicate inserts gracefully
+      if (!wasInserted) {
+        setError(`Value ${val} already exists in the tree — duplicates are not allowed`);
+        return;
+      }
+
       setRoot(newRoot);
       setSteps(newSteps);
       setCurrentStep(0);
@@ -146,14 +152,16 @@ export default function Visualizer() {
     },
     [root]
   );
-
-  const handleDeleteInput = () => {
-    handleDelete(parseInt(deleteValue.trim()));
-    setDeleteValue("");
-  };
-
-  const handleDeleteKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleDeleteInput();
+  
+  // Unified text field for both insert and delete
+  const handleDeleteFromInput = () => {
+    const val = parseInt(inputValue.trim());
+    if (!inputValue.trim() || isNaN(val)) {
+      setError("Please enter a valid number to delete");
+      return;
+    }
+    handleDelete(val);
+    setInputValue("");
   };
 
   const handlePreset = (sequence: number[]) => {
@@ -204,39 +212,47 @@ export default function Visualizer() {
           </p>
         </motion.div>
 
-        {/* Controls */}
+        {/* Unified Controls */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="mb-4 space-y-3"
+          className="mb-10 flex flex-col items-center gap-4"
         >
-          {/* Insert row */}
-          <div className="flex flex-wrap items-center gap-3 justify-center">
-            <div className="relative flex items-center">
-              <input
-                type="number"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Insert value (0-9999)"
-                className="h-12 w-52 rounded-xl border border-white/20 bg-white/5 px-4 text-white placeholder-slate-500 backdrop-blur-sm outline-none focus:border-violet-500/60 focus:ring-1 focus:ring-violet-500/30 transition-all"
-              />
-            </div>
-
+          {/* Main Action Pill */}
+          <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 pr-2.5 backdrop-blur-xl shadow-2xl">
+            <input
+              type="number"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleInputInsert()}
+              placeholder="Enter value..."
+              className="h-12 w-48 rounded-xl border-none bg-black/20 px-4 text-white placeholder-slate-400 outline-none focus:bg-black/40 transition-all font-mono"
+            />
             <button
               onClick={handleInputInsert}
-              className="flex h-12 items-center gap-2 rounded-xl border border-violet-500/40 bg-gradient-to-r from-violet-600 to-blue-600 px-6 font-bold text-white shadow-lg shadow-violet-500/20 transition-all hover:shadow-violet-500/40 hover:scale-[1.02] active:scale-95"
+              className="flex h-12 items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 px-6 font-bold text-white shadow-lg shadow-violet-500/20 transition-all hover:scale-105 active:scale-95"
             >
               <Plus size={18} />
               Insert
             </button>
+            <button
+              onClick={handleDeleteFromInput}
+              disabled={!root}
+              className="flex h-12 items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-5 font-bold text-red-400 transition-all hover:bg-red-500/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Minus size={18} />
+              Delete
+            </button>
+          </div>
 
+          {/* Secondary Actions */}
+          <div className="flex flex-wrap items-center justify-center gap-3">
             <button
               onClick={handleRandomInsert}
-              className="flex h-12 items-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 text-slate-300 transition-all hover:bg-white/10 hover:text-white"
+              className="flex h-10 items-center gap-2 rounded-lg bg-white/5 px-4 text-sm text-slate-300 transition-all hover:bg-white/10 hover:text-white"
             >
-              <Shuffle size={16} />
+              <Shuffle size={14} />
               Random
             </button>
 
@@ -244,9 +260,9 @@ export default function Visualizer() {
             <div className="relative">
               <button
                 onClick={() => setShowPresets(!showPresets)}
-                className="flex h-12 items-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 text-slate-300 transition-all hover:bg-white/10 hover:text-white"
+                className="flex h-10 items-center gap-2 rounded-lg bg-white/5 px-4 text-sm text-slate-300 transition-all hover:bg-white/10 hover:text-white"
               >
-                Presets
+                Examples
                 <ChevronDown size={14} className={`transition-transform ${showPresets ? "rotate-180" : ""}`} />
               </button>
               <AnimatePresence>
@@ -255,7 +271,7 @@ export default function Visualizer() {
                     initial={{ opacity: 0, y: 4, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 4, scale: 0.95 }}
-                    className="absolute top-full left-0 mt-2 w-48 rounded-xl border border-white/10 bg-slate-800/95 p-2 backdrop-blur-xl shadow-xl z-20"
+                    className="absolute top-full mt-2 w-48 rounded-xl border border-white/10 bg-slate-800/95 p-2 backdrop-blur-xl shadow-xl z-20 xl:left-0 left-1/2 xl:-translate-x-0 -translate-x-1/2"
                   >
                     {Object.entries(PRESET_SEQUENCES).map(([name, seq]) => (
                       <button
@@ -274,34 +290,11 @@ export default function Visualizer() {
 
             <button
               onClick={handleReset}
-              className="flex h-12 items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 text-red-400 transition-all hover:bg-red-500/20"
+              className="flex h-10 items-center gap-2 rounded-lg bg-white/5 px-4 text-sm text-slate-400 transition-all hover:bg-red-500/10 hover:text-red-400"
             >
-              <Trash2 size={16} />
-              Reset
+              <Trash2 size={14} />
+              Clear Tree
             </button>
-          </div>
-
-          {/* Delete row */}
-          <div className="flex flex-wrap items-center gap-3 justify-center">
-            <div className="relative flex items-center">
-              <input
-                type="number"
-                value={deleteValue}
-                onChange={(e) => setDeleteValue(e.target.value)}
-                onKeyDown={handleDeleteKeyDown}
-                placeholder="Delete value"
-                className="h-11 w-44 rounded-xl border border-red-500/20 bg-red-500/5 px-4 text-white placeholder-slate-500 backdrop-blur-sm outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/20 transition-all"
-              />
-            </div>
-            <button
-              onClick={handleDeleteInput}
-              disabled={!root}
-              className="flex h-11 items-center gap-2 rounded-xl border border-red-500/40 bg-gradient-to-r from-red-600 to-rose-600 px-5 font-bold text-white shadow-lg shadow-red-500/20 transition-all hover:shadow-red-500/40 hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Minus size={16} />
-              Delete Node
-            </button>
-            <p className="text-xs text-slate-500">← Enter a value and click to remove it from the tree</p>
           </div>
         </motion.div>
 

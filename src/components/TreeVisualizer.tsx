@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AVLNode, assignPositions } from "@/lib/avl";
 
@@ -78,24 +78,13 @@ export default function TreeVisualizer({
   width = 900,
   height = 500,
 }: TreeVisualizerProps) {
-  const svgRef = useRef<SVGSVGElement>(null);
 
-  // Assign positions before rendering
-  const rootClone = root;
-  if (rootClone) {
-    assignPositions(rootClone, width / 2, 60, width / 4);
-  }
-
-  const nodes: NodePos[] = [];
-  const edges: Edge[] = [];
-  collectNodes(rootClone, nodes);
-  collectEdges(rootClone, edges);
-
+  // Bug fix: null check FIRST, then assign positions on the actual root
   if (!root) {
     return (
       <div
         className="flex items-center justify-center rounded-2xl border border-white/10 bg-white/5"
-        style={{ width, height }}
+        style={{ width: "100%", height }}
       >
         <div className="text-center text-slate-400">
           <div className="mb-2 text-5xl">🌳</div>
@@ -106,13 +95,20 @@ export default function TreeVisualizer({
     );
   }
 
+  // Assign x,y positions (mutates the snapshot nodes, but idempotent per render)
+  assignPositions(root, width / 2, 60, width / 4);
+
+  const nodes: NodePos[] = [];
+  const edges: Edge[] = [];
+  collectNodes(root, nodes);
+  collectEdges(root, edges);
+
   return (
     <div
       className="relative overflow-auto rounded-2xl border border-white/10 bg-gradient-to-br from-slate-900/80 to-slate-800/80"
       style={{ width: "100%", minHeight: height }}
     >
       <svg
-        ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
         style={{ width: "100%", height }}
         className="select-none"
@@ -134,15 +130,11 @@ export default function TreeVisualizer({
         {edges.map((edge) => (
           <motion.line
             key={edge.id}
-            x1={edge.x1}
-            y1={edge.y1}
-            x2={edge.x2}
-            y2={edge.y2}
+            initial={{ opacity: 0, x1: edge.x1, y1: edge.y1, x2: edge.x2, y2: edge.y2 }}
+            animate={{ opacity: 1, x1: edge.x1, y1: edge.y1, x2: edge.x2, y2: edge.y2 }}
+            transition={{ type: "spring", stiffness: 120, damping: 14 }}
             stroke="rgba(148,163,184,0.4)"
             strokeWidth={2}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4 }}
           />
         ))}
 
@@ -156,17 +148,16 @@ export default function TreeVisualizer({
             return (
               <motion.g
                 key={node.id}
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
+                initial={{ x, y, scale: 0, opacity: 0 }}
+                animate={{ x, y, scale: 1, opacity: 1 }}
                 exit={{ scale: 0, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 260, damping: 20 }}
-                style={{ originX: x, originY: y }}
+                transition={{ type: "spring", stiffness: 120, damping: 14 }}
               >
                 {/* Glow ring for highlighted */}
                 {isHighlighted && (
                   <circle
-                    cx={x}
-                    cy={y}
+                    cx={0}
+                    cy={0}
                     r={NODE_RADIUS + 6}
                     fill="none"
                     stroke="#f59e0b"
@@ -178,8 +169,8 @@ export default function TreeVisualizer({
 
                 {/* Node circle */}
                 <circle
-                  cx={x}
-                  cy={y}
+                  cx={0}
+                  cy={0}
                   r={NODE_RADIUS}
                   fill={fillColor}
                   stroke={borderColor}
@@ -190,8 +181,8 @@ export default function TreeVisualizer({
 
                 {/* Node value */}
                 <text
-                  x={x}
-                  y={y + 1}
+                  x={0}
+                  y={1}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fill="white"
@@ -204,8 +195,8 @@ export default function TreeVisualizer({
 
                 {/* Balance Factor label */}
                 <text
-                  x={x + NODE_RADIUS + 4}
-                  y={y - NODE_RADIUS + 2}
+                  x={NODE_RADIUS + 4}
+                  y={-NODE_RADIUS + 2}
                   fill={Math.abs(node.balanceFactor) > 1 ? "#ef4444" : "#94a3b8"}
                   fontSize={10}
                   fontWeight="600"
@@ -217,8 +208,8 @@ export default function TreeVisualizer({
 
                 {/* Height label */}
                 <text
-                  x={x}
-                  y={y + NODE_RADIUS + 12}
+                  x={0}
+                  y={NODE_RADIUS + 12}
                   textAnchor="middle"
                   fill="#64748b"
                   fontSize={9}
